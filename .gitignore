@@ -1,0 +1,18 @@
+# 1. Block EVERYTHING by default
+*
+
+# 2. Whitelist root-level files/dirs
+!.gitignore
+!README.md
+!docker-compose.yml
+!.env  # Only allow root .env (optional)
+
+# 3. Allow files inside microservices, but exclude build artifacts/logs
+!microservice-*/**       # Allow all files inside microservice dirs
+microservice-*/node_modules/
+microservice-*/dist/
+microservice-*/.env      # Block .env inside microservices (override if needed)
+microservice-*/coverage/
+microservice-*/.turbo/
+microservice-*/.next/
+microservice-*/*.log
