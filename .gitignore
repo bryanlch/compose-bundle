@@ -5,6 +5,9 @@
 !.gitignore
 !README.md
 !docker-compose.yml
+!docker-compose.dev.yml
+!docker-compose.local.yml
+!docker-compose.prod.yml
 !.env  # Only allow root .env (optional)
 
 # 3. Allow files inside microservices, but exclude build artifacts/logs

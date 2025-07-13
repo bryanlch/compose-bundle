@@ -5,18 +5,19 @@ services:
     image: rabbitmq:3-management
     container_name: rabbitmq
     ports:
-      - "5672:5672"       # puerto de comunicación AMQP
-      - "15672:15672"     # puerto de dashboard web
+      - "5672:5672"
+      - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
 
-  microservicio1:
+  microservice-core:
     build:
       context: ./microservice-core
+      dockerfile: Dockerfile
     container_name: template
     depends_on:
       - rabbitmq
     environment:
       RABBITMQ_URI: ${RABBITMQ_URI}
-    command: ["node", "dist/main"]
+    command: ["pm2-runtime", "dist/main.js"]

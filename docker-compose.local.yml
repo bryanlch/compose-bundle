@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    container_name: rabbitmq
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+
+  microservice-core:
+    build:
+      context: ./microservice-core
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./microservice-core:/app
+      - /app/node_modules
+    depends_on:
+      - rabbitmq
+    env_file:
+      - ./microservice-core/.env
+    ports:
+      - "${PORT_CORE:-3030}:${PORT_CORE:-3030}"
+    command: npm run start:dev
+
+  microservice-test:
+    build:
+      context: ./microservice-test
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./microservice-test:/app
+      - /app/node_modules
+    depends_on:
+      - rabbitmq
+    env_file:
+      - ./microservice-test/.env
+    ports:
+      - "${PORT_TEST:-3031}:${PORT_TEST:-3031}"
+    command: npm run start:dev

@@ -7,65 +7,54 @@ This repository defines a development and production environment for running mul
 ## 📁 Structure
 
 ```
-.
-├── docker-compose.yml
-├── docker-compose.override.yml   # Used automatically in development
-├── microservice-1/
-│   └── Dockerfile
-│   └── src/...
-├── microservice-2/
-│   └── Dockerfile
-│   └── src/...
-└── README.md
+root-project/
+│
+├── docker-compose.dev.yml        # Local development
+├── docker-compose.prod.yml       # Production (PM2 support)
+├── .env.dev                      # RabbitMQ configuration for local
+├── .gitignore                    # Ignore build artifacts, .env, etc.
+│
+├── microservicio1/
+│   ├── Dockerfile
+│   ├── Dockerfile.dev
+│   ├── .env.example
+│   └── src/
+│
+└── microservicio2/
+    ├── Dockerfile
+    ├── Dockerfile.dev
+    ├── .env.example
+    └── src/
 ```
 
 ---
 
 ## 🚀 Getting Started
 
-### 🧪 Development Mode
-
-Uses volume mounting and `start:dev` for live reload via `docker-compose.override.yml`.
+### 📦 Production (Server with PM2)
 
 ```bash
-docker-compose up --build
+cp .env.dev .env
+docker-compose -f docker-compose.prod.yml up --build -d
+pm2 start ecosystem.config.js --env production
 ```
 
-This will:
-
-- Start RabbitMQ
-- Start each microservice with `npm run start:dev`
-- Mount source code from local folder
-- Reload services on code change
-
-### 🔒 Production Mode
-
-Runs each microservice using `npm run start` without mounting the code.
+### 📦 Develop (Server with PM2)
 
 ```bash
-docker-compose -f docker-compose.yml up --build
+cp .env.dev .env
+docker-compose -f docker-compose.dev.yml up -d
+pm2 start ecosystem.config.js --env development
+pm2 save
+pm2 startup
 ```
 
-This ignores `override.yml` and uses the `start` command for performance and isolation.
+### 🧪 Local Development
 
----
-
-## 🧠 Switching Between `start` and `start:dev` via ENV
-
-Instead of defining the command in `docker-compose.override.yml`, you can set the command dynamically in your `Dockerfile`:
-
-```Dockerfile
-CMD ["npm", "run", "${NEST_MODE}"]
+```bash
+cp .env.dev .env
+docker-compose -f docker-compose.dev.yml up --build
 ```
-
-Then set the environment variable in `docker-compose`:
-
-```yaml
-environment:
-  - NEST_MODE=start:dev  # or "start" in production
-```
-
-This approach allows a single `Dockerfile` to be used for all environments.
 
 ---
 
@@ -82,31 +71,43 @@ Login with:
 
 ## ➕ Adding a New Microservice
 
-1. Create a new folder like `microservice-3`
-2. Add a `Dockerfile` inside it
-3. Register it in `docker-compose.yml`:
+1. Create a new folder `microservicioX`
+2. Add `Dockerfile`, `Dockerfile.dev`, `.env.example`
+3. Include it in both compose files (`docker-compose.dev.yml` and `docker-compose.prod.yml`):
+
+**Production:**
 
 ```yaml
-  microservice-3:
+  microservice-*:
     build:
-      context: ./microservice-3
-    environment:
-      RABBITMQ_URI: amqp://admin:admin123@rabbitmq:5672
+      context: ./microservice-*
+      dockerfile: Dockerfile
+    container_name: container_name
     depends_on:
       - rabbitmq
+    environment:
+      RABBITMQ_URI: ${RABBITMQ_URI}
+    command: ["pm2-runtime", "dist/main.js"]
 ```
 
-4. (Optional) Add override for development in `docker-compose.override.yml`:
+**Development:**
 
 ```yaml
-  microservice-3:
+  microservice-*:
+    build:
+      context: ./microservice-*
+      dockerfile: Dockerfile.dev
     volumes:
-      - ./microservice-3:/app
+      - ./microservice:/app
       - /app/node_modules
+    depends_on:
+      - rabbitmq
+    environment:
+      RABBITMQ_URI: ${RABBITMQ_URI}
     command: npm run start:dev
-    ports:
-      - "3003:3000"
 ```
+
+4. Use same `RABBITMQ_URI` and `.env` strategy
 
 ---
 
@@ -151,8 +152,6 @@ This ignores everything except the microservices and Docker files:
 !docker-compose.yml
 !docker-compose.override.yml
 !README.md
-!microservice-1/**
-!microservice-2/**
 ```
 
 You can place a `.gitignore` inside each microservice as well to ignore `node_modules`, `dist`, etc.
