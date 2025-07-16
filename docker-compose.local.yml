@@ -1,12 +1,54 @@
 version: '3.8'
 
 services:
+  # Servicio MySQL
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_HOST: '%'  # Permite conexiones root desde cualquier host
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./mysql/migrations:/migrations
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+
+  # Servicio para administración de BD (opcional)
+  adminer:
+    image: adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: ${DB_HOST}
+      ADMINER_DESIGN: pepa  # Diseño alternativo
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - app-network
+
+# Servicio RabbitMQ
   rabbitmq:
     container_name: rabbitmq
     image: rabbitmq:3-management
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "15672:15672" # UI de administración opcional
+    networks:
+      - app-network
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
@@ -21,9 +63,16 @@ services:
     depends_on:
       - rabbitmq
     env_file:
-      - ./microservice-core/.env
+      - .env
+    environment:
+      - PORT=${PORT_CORE}
+      - APP_NAME=core-ms
+      - GLOBAL_PREFIX=/api
+      - DB_NAME=core_db
     ports:
-      - "${PORT_CORE:-3030}:${PORT_CORE:-3030}"
+      - "${PORT_CORE}:${PORT_CORE}"
+    networks:
+      - app-network
     command: npm run start:dev
 
   microservice-test:
@@ -36,7 +85,22 @@ services:
     depends_on:
       - rabbitmq
     env_file:
-      - ./microservice-test/.env
+      - .env
+    environment:
+      - PORT=${PORT_NOTIFICATION}
+      - APP_NAME=test-ms
+      - GLOBAL_PREFIX=/api
+      - DB_NAME=core_db
     ports:
-      - "${PORT_TEST:-3031}:${PORT_TEST:-3031}"
+      - "${PORT_NOTIFICATION}:${PORT_NOTIFICATION}"
+    networks:
+      - app-network
     command: npm run start:dev
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local
