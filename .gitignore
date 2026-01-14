@@ -21,6 +21,7 @@ microservice-*/.next/
 microservice-*/*.log
 
 #4. Allow cluster-provisioning files, but exclude sensitive files
-!cluster-provisioning/**  # Allow all files inside cluster-provisioning
-cluster-provisioning/.env*  # Block all .env files inside cluster-provisioning
-cluster-provisioning/database/schemas/**/secrets.sql  # Block any secrets.sql files
+!cluster-provisioning/
+!cluster-provisioning/**
+cluster-provisioning/.env*
+!cluster-provisioning/.env.example

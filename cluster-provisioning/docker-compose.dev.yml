@@ -1,0 +1,119 @@
+version: '3.8'
+
+services:
+  # --- TRAEFIK ---
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik_dev
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"     # HTTP
+      - "8080:8080" # Dashboard: http://localhost:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - app-network
+
+  # --- BASE DE DATOS ---
+  postgres:
+    image: postgis/postgis:latest
+    container_name: postgres_dev
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_MULTIPLE_DATABASES: ${DB_NAME}
+    volumes:
+      - ./database/initdb.sh:/docker-entrypoint-initdb.d/initdb.sh
+      - ./database/schemas:/docker-entrypoint-initdb.d/schemas
+      - postgres_data_dev:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+
+# --- CACHE & MESSAGE BROKER ---
+  redis:
+    image: redis:7-alpine
+    container_name: redis_dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_dev:/data
+    networks:
+      - app-network
+
+  rabbitmq:
+    container_name: rabbitmq_dev
+    image: rabbitmq:3-management
+    ports:
+      - "15672:15672" # Dashboard RabbitMQ
+      - "5672:5672"
+    networks:
+      - app-network
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+
+  # --- BACKEND CORE ---
+  core-services:
+    build:
+      context: ../microservice-core
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ../microservice-core:/app
+      - /app/node_modules
+    depends_on:
+      - rabbitmq
+      - postgres
+    env_file: .env
+    environment:
+      - PORT=${PORT_CORE}
+      - APP_NAME="Service Core Dev"
+      - GLOBAL_PREFIX=/api
+    networks:
+      - app-network
+    command: npm run start:dev
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.core.rule=PathPrefix(`/api`)"
+      - "traefik.http.services.core.loadbalancer.server.port=${PORT_CORE}"
+
+  # --- BACKEND realtime-engine (Preparación Fase 2) ---
+  # realtime-engine:
+  #   build:
+  #     context: ./realtime-engine
+  #     dockerfile: Dockerfile.dev
+  #   volumes:
+  #     - ./realtime-engine:/app
+  #     - /app/node_modules
+  #   depends_on:
+  #     - rabbitmq
+  #     - redis
+  #   env_file: .env
+  #   environment:
+  #     - PORT=${PORT_SSE}
+  #   networks:
+  #     - app-network
+  #   command: npm run start:dev
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.sse.rule=PathPrefix(`/live`)"
+  #     - "traefik.http.services.sse.loadbalancer.server.port=${PORT_SSE}"
+  #     # Headers necesarios para desarrollo
+  #     - "traefik.http.middlewares.sse-headers.headers.customresponseheaders.Content-Type=text/event-stream"
+  #     - "traefik.http.middlewares.sse-headers.headers.customresponseheaders.Connection=keep-alive"
+  #     - "traefik.http.routers.sse.middlewares=sse-headers"
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data_dev:
+  redis_data_dev:

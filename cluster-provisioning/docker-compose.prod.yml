@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  # --- TRAEFIK (Reverse Proxy & Load Balancer) ---
+  traefik:
+    image: traefik:v2.10
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.swarmMode=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      # En prod, aquí agregarías los resolvers para Let's Encrypt (HTTPS)
+    ports:
+      - "80:80"
+      # El 8080 (dashboard) no se expone en prod por seguridad, o se protege con password
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - app-network
+    deploy:
+      mode: global # 'global' significa 1 instancia en CADA nodo (o usa 'replicated' con placement constraints)
+      placement:
+        constraints:
+          - node.role == manager
+
+  # --- BASES DE DATOS ---
+  postgres:
+    image: postgis/postgis:latest
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_MULTIPLE_DATABASES: ${DB_AUTH_NAME}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    networks:
+      - app-network
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data_prod:/data
+    networks:
+      - app-network
+    deploy:
+      replicas: 1
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    networks:
+      - app-network
+    deploy:
+      replicas: 1
+      # No exponemos puertos al exterior, solo red interna
+
+  # --- MICROSERVICIOS ---
+  microservice-core:
+    image: tu-registry/microservice-core:latest # ¡USAR IMAGEN CONSTRUIDA!
+    env_file: .env
+    networks:
+      - app-network
+    deploy:
+      replicas: 2 # Empezamos con 2 para alta disponibilidad
+      update_config:
+        parallelism: 1
+        delay: 10s # Actualiza uno por uno cada 10s (Zero Downtime Deployment)
+      restart_policy:
+        condition: on-failure
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.core.rule=PathPrefix(`/api`)"
+        - "traefik.http.services.core.loadbalancer.server.port=${PORT_CORE}"
+
+  # --- FASE 2: SSE (Comentado hasta que estés listo) ---
+  # microservice-sse:
+  #   image: tu-registry/microservice-sse:latest
+  #   env_file: .env
+  #   networks:
+  #     - app-network
+  #   deploy:
+  #     replicas: 2 # Base normal
+  #     resources: # LIMITES (Importante en Swarm para no tumbar el servidor)
+  #       limits:
+  #         cpus: '0.50'
+  #         memory: 512M
+  #     labels:
+  #       - "traefik.enable=true"
+  #       - "traefik.http.routers.sse.rule=PathPrefix(`/live`)"
+  #       - "traefik.http.services.sse.loadbalancer.server.port=${PORT_SSE}"
+
+networks:
+  app-network:
+    driver: overlay # ¡OBLIGATORIO en Swarm!
+
+volumes:
+  postgres_data_prod:
+  redis_data_prod:

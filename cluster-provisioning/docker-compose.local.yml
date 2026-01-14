@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  # Servicio PostgreSQL con PostGIS
+  postgres:
+    image: postgis/postgis:latest
+    container_name: postgres_dev
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_MULTIPLE_DATABASES: ${DB_NAME_TERMINALS},${DB_NAME_USERS}
+    volumes:
+      - ./database/initdb.sh:/docker-entrypoint-initdb.d/initdb.sh
+      - ./database/schemas:/docker-entrypoint-initdb.d/schemas
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME}"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+
+# Servicio RabbitMQ
+  rabbitmq:
+    container_name: rabbitmq
+    image: rabbitmq:3-management
+    ports:
+      - "15672:15672"
+    networks:
+      - app-network
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+
+  microservice-core:
+    build:
+      context: ./microservice-core
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./microservice-core:/app
+      - /app/node_modules
+    depends_on:
+      - rabbitmq
+    env_file:
+      - .env
+    environment:
+      - PORT=${PORT_CORE}
+      - APP_NAME=ms-core
+      - GLOBAL_PREFIX=/api
+      - DB_NAME=core_db
+    ports:
+      - "${PORT_CORE}:${PORT_CORE}"
+    networks:
+      - app-network
+    command: npm run start:dev
+
+  microservice-sse:
+    build:
+      context: ./microservice-sse
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./microservice-sse:/app
+      - /app/node_modules
+    depends_on:
+      - rabbitmq
+    env_file:
+      - .env
+    environment:
+      - PORT=${PORT_SSE}
+      - APP_NAME=ms-sse
+      - GLOBAL_PREFIX=/api
+      - DB_NAME=core_db
+    ports:
+      - "${PORT_SSE}:${PORT_SSE}"
+    networks:
+      - app-network
+    command: npm run start:dev
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
