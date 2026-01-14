@@ -1,27 +1,49 @@
-# 1. Block EVERYTHING by default
+# ============================
+# 1. BLOQUEAR TODO POR DEFECTO
+# ============================
 *
 
-# 2. Whitelist root-level files/dirs
+# ============================
+# 2. PERMITIR (Whitelist) RAÍZ
+# ============================
+# Necesario para que git funcione
 !.gitignore
+
+# Documentación y Configuración Raíz
 !README.md
-!docker-compose.yml
-!docker-compose.dev.yml
-!docker-compose.local.yml
-!docker-compose.prod.yml
-!.env  # Only allow root .env (optional)
 
-# 3. Allow files inside microservices, but exclude build artifacts/logs
-!microservice-*/**       # Allow all files inside microservice dirs
-microservice-*/node_modules/
-microservice-*/dist/
-microservice-*/.env      # Block .env inside microservices (override if needed)
-microservice-*/coverage/
-microservice-*/.turbo/
-microservice-*/.next/
-microservice-*/*.log
+# ============================
+# 3. MICROSERVICE-CORE
+# ============================
 
-#4. Allow cluster-provisioning files, but exclude sensitive files
+# PASO A: Permitir entrar a la carpeta
+!microservice-core/
+
+# PASO B: Permitir TODO el contenido dentro (fuerza la inclusión)
+!microservice-core/**
+
+# PASO C: VOLVER A BLOQUEAR (Blacklist) basura interna
+# Esto debe ir DESPUÉS del paso B para que sobrescriba la orden de "incluir todo"
+microservice-core/node_modules/
+microservice-core/dist/
+microservice-core/build/
+microservice-core/coverage/
+microservice-core/*.log
+
+# Seguridad: Bloquear .env DENTRO del microservicio (aunque permitimos el de raíz)
+microservice-core/.env
+microservice-core/.env.*
+# Excepción: Si quieres permitir un ejemplo
+!microservice-core/.env.example
+
+# ============================
+# 4. CLUSTER-PROVISIONING
+# ============================
 !cluster-provisioning/
 !cluster-provisioning/**
-cluster-provisioning/.env*
+
+# Bloquear secretos dentro de esta carpeta
+cluster-provisioning/.env
+cluster-provisioning/.env.*
+# Permitir solo el ejemplo
 !cluster-provisioning/.env.example
